@@ -145,13 +145,15 @@ public class MainActivity extends Activity {
         super.onResume();
         if (needReload) { needReload = false; loadApps(); }
         else if (!items.isEmpty() && !isDefaultHome()
-                && (items.get(0).type == TYPE_HOMEFIX) == homeServiceOn(this)) loadApps();
+                && (items.get(0).type == TYPE_HOMEFIX) == homeFixOn()) loadApps();
+        HomeWatch.start(this);
         updateClock();
         focusTile(focusIndex);
         String v = "";
         try { v = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
         ((TextView) findViewById(R.id.ver)).setText("Gọn Launcher " + v + "  •  Nút Home: "
-                + (isDefaultHome() ? "mặc định" : homeServiceOn(this) ? "BẬT" : "TẮT"));
+                + (isDefaultHome() ? "mặc định" : homeServiceOn(this) ? "BẬT (trợ năng)"
+                : HomeDetect.usageGranted(this) ? "BẬT (theo dõi)" : "TẮT"));
         ui.postDelayed(this::askHomeService, 1500);
     }
 
@@ -188,6 +190,11 @@ public class MainActivity extends Activity {
         return ri != null && ri.activityInfo != null && getPackageName().equals(ri.activityInfo.packageName);
     }
 
+    /** Một trong 2 cách giữ nút Home đã bật chưa. */
+    private boolean homeFixOn() {
+        return homeServiceOn(this) || HomeDetect.usageGranted(this);
+    }
+
     static boolean homeServiceOn(Context c) {
         String s = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         return s != null && s.contains(c.getPackageName() + "/");
@@ -196,25 +203,68 @@ public class MainActivity extends Activity {
     /** Tivi không cho đặt mặc định -> mời bật dịch vụ "Nút Home mở Gọn Launcher". */
     private void askHomeService() {
         if (askedHome || isFinishing()) return;
-        if (isDefaultHome() || homeServiceOn(this) || prefs.getBoolean("no_ask_home", false)) return;
+        if (isDefaultHome() || homeFixOn() || prefs.getBoolean("no_ask_home", false)) return;
         askedHome = true;
         new AlertDialog.Builder(this)
                 .setTitle("Cho nút Home mở Gọn Launcher")
-                .setMessage("Tivi không cho đặt launcher mặc định, cần bật dịch vụ nút Home:\n\n" +
-                        "1. Bấm \"Mở Cài đặt\" bên dưới (màn hình Hỗ trợ tiếp cận sẽ mở ra).\n" +
-                        "2. Kéo xuống phần Dịch vụ, chọn \"Gọn Launcher – Nút Home\".\n" +
-                        "3. Chọn Bật / Sử dụng dịch vụ → bấm OK để đồng ý.\n" +
-                        "4. Bấm Back quay lại đây: góc trên phải sẽ báo \"Nút Home: BẬT\".")
-                .setPositiveButton("Mở Cài đặt", (d, w) -> {
-                    try {
-                        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-                    } catch (Exception e) {
-                        try { startActivity(new Intent(Settings.ACTION_SETTINGS)); } catch (Exception ignored) { }
-                    }
-                })
-                .setNeutralButton("Không hỏi nữa", (d, w) -> prefs.edit().putBoolean("no_ask_home", true).apply())
+                .setMessage("Tivi không cho đặt launcher mặc định. Chọn 1 trong 2 cách:\n\n" +
+                        "CÁCH 1 – Quyền sử dụng (nên thử trước):\n" +
+                        "Bấm \"Cách 1\" → tìm Gọn Launcher → bật \"Cho phép truy cập dữ liệu sử dụng\".\n" +
+                        "(Nếu không tự mở: Cài đặt → Ứng dụng → Quyền truy cập đặc biệt → Truy cập dữ liệu sử dụng)\n\n" +
+                        "CÁCH 2 – Trợ năng:\n" +
+                        "Bấm \"Cách 2\" → tìm \"Gọn Launcher – Nút Home\" → Bật → OK.\n\n" +
+                        "Xong bấm Back quay lại: góc trên phải sẽ báo \"Nút Home: BẬT\".")
+                .setPositiveButton("Cách 1", (d, w) -> openUsageAccess())
+                .setNeutralButton("Cách 2", (d, w) -> openAccessibility())
                 .setNegativeButton("Để sau", null)
                 .show();
+    }
+
+    private void openUsageAccess() {
+        Intent[] tries = {
+                new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS),
+                new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).setPackage("com.android.settings"),
+                new Intent().setClassName("com.android.tv.settings",
+                        "com.android.tv.settings.device.apps.specialaccess.SpecialAppAccessActivity"),
+                new Intent(Settings.ACTION_APPLICATION_SETTINGS),
+        };
+        for (Intent i : tries) {
+            try {
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+                Toast.makeText(this, "Chọn Gọn Launcher → bật Cho phép", Toast.LENGTH_LONG).show();
+                return;
+            } catch (Exception ignored) { }
+        }
+        Toast.makeText(this, "Tivi không mở được mục này", Toast.LENGTH_LONG).show();
+    }
+
+    /**
+     * Cài đặt của Android TV chỉ hiện TalkBack, không hiện dịch vụ của app ngoài.
+     * Thử mở trang Trợ năng kiểu điện thoại (thường còn ẩn trong tivi) – trang này hiện đủ dịch vụ.
+     */
+    private void openAccessibility() {
+        Intent[] tries = {
+                new Intent().setClassName("com.android.settings",
+                        "com.android.settings.Settings$AccessibilitySettingsActivity"),
+                new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).setPackage("com.android.settings"),
+                new Intent().setClassName("com.android.settings",
+                        "com.android.settings.Settings$AccessibilitySettingsActivity").setAction(Intent.ACTION_MAIN),
+                new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+        };
+        for (int i = 0; i < tries.length; i++) {
+            try {
+                tries[i].addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(tries[i]);
+                if (i == tries.length - 1) {
+                    Toast.makeText(this, "Tivi không có trang Trợ năng đầy đủ. Nếu chỉ thấy TalkBack, hãy chụp màn hình báo lại.",
+                            Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, "Tìm mục \"Gọn Launcher – Nút Home\" → Bật → OK", Toast.LENGTH_LONG).show();
+                }
+                return;
+            } catch (Exception ignored) { }
+        }
     }
 
     // ------------------------------------------------------------------ hình nền
@@ -436,7 +486,7 @@ public class MainActivity extends Activity {
             return col.compare(a.label, b.label);
         });
         Collections.sort(hidden, (a, b) -> col.compare(a.label, b.label));
-        if (!isDefaultHome() && !homeServiceOn(this)) {
+        if (!isDefaultHome() && !homeFixOn()) {
             shown.add(fixed(TYPE_HOMEFIX, "Bật nút Home", R.drawable.ic_settings, 0xFFC62828));
         }
         shown.addAll(apps);

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Kết nối ADB nội bộ 127.0.0.1 và đọc danh sách toàn bộ app để dọn dẹp -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -8,6 +9,11 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- Mở Gọn Launcher khi bật tivi -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Cách 2 cho nút Home: biết màn hình nào đang mở -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -63,6 +69,15 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/home_service" />
+        </service>
+
+        <service
+            android:name=".HomeWatch"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Chuyen nut Home ve launcher" />
         </service>
 
         <!-- Màn hình chờ -->
