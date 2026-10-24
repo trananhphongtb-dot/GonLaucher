@@ -20,20 +20,22 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build APK
-        run: gradle assembleRelease --no-daemon
+        run: |
+          cd "$(dirname "$(find . -name settings.gradle -not -path '*/node_modules/*' | head -1)")"
+          gradle assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/app-release.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: GonLauncher-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: app-release.apk
 
-      # Đăng APK lên mục Releases để tivi tải thẳng bằng app Downloader
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Gọn Launcher
-          files: app/build/outputs/apk/release/app-release.apk
+          files: app-release.apk
           make_latest: true
 
 permissions:
