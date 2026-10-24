@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_service_label">Gọn Launcher – Nút Home</string>
+    <string name="home_service_desc">Bấm nút Home hoặc bật tivi sẽ mở thẳng Gọn Launcher thay cho màn hình chính gốc. Dịch vụ chỉ biết màn hình nào đang mở, không đọc nội dung.</string>
+</resources>

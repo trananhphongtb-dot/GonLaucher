@@ -10,8 +10,17 @@ android {
         applicationId 'vn.gon.launcher'
         minSdk 21
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        versionCode 2
+        versionName "1.1"
+    }
+
+    signingConfigs {
+        gon {
+            storeFile file('gon.jks')
+            storePassword 'gonlauncher'
+            keyAlias 'gon'
+            keyPassword 'gonlauncher'
+        }
     }
 
     buildTypes {
@@ -19,7 +28,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.gon
         }
     }
 

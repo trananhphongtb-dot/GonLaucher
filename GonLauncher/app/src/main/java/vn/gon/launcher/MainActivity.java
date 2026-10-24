@@ -1,7 +1,9 @@
 package vn.gon.launcher;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.WallpaperManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -11,23 +13,29 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.DisplayMetrics;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.BaseAdapter;
-import android.widget.GridView;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,41 +49,41 @@ import java.util.Set;
 
 /**
  * Gọn Launcher – màn hình chính siêu nhẹ cho Android TV.
- * Không thư viện ngoài, không chạy ngầm, không quảng cáo.
+ * Hình nền toàn màn hình, đồng hồ góc trên, một hàng app gọn dưới đáy.
  */
 public class MainActivity extends Activity {
 
     private static final String PREFS = "gon";
-    private static final String KEY_ORDER = "order";   // danh sách package theo thứ tự, cách nhau bởi dấu ,
-    private static final String KEY_HIDDEN = "hidden"; // các package bị ẩn
+    private static final String KEY_ORDER = "order";
+    private static final String KEY_HIDDEN = "hidden";
+    private static final String KEY_BG = "bg";
 
-    private static final int TYPE_APP = 0;
-    private static final int TYPE_SETTINGS = 1;
-    private static final int TYPE_HIDDEN = 2;
-    private static final int TYPE_CLEAN = 3;
+    private static final int TYPE_APP = 0, TYPE_SETTINGS = 1, TYPE_HIDDEN = 2, TYPE_CLEAN = 3, TYPE_WALL = 4;
 
     static class Item {
         int type = TYPE_APP;
-        String label;
-        String pkg;
+        String label, pkg;
         ComponentName comp;
-        Drawable banner;
-        Drawable icon;
+        Drawable banner, icon;
     }
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final List<Item> items = new ArrayList<>();
     private final List<Item> hiddenApps = new ArrayList<>();
-    private GridView grid;
-    private Adapter adapter;
+    private final List<View> tiles = new ArrayList<>();
+    private LinearLayout row;
+    private HorizontalScrollView scroller;
+    private ImageView wallpaper;
+    private LayoutInflater inf;
     private SharedPreferences prefs;
     private volatile boolean loading = false;
     private boolean needReload = false;
+    private int focusIndex = 0;
+    private boolean askedHome = false;
 
     private final BroadcastReceiver pkgReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
-            // Cài / gỡ / cập nhật app -> tải lại danh sách
             if (hasWindowFocus()) loadApps(); else needReload = true;
         }
     };
@@ -85,15 +93,10 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         setContentView(R.layout.activity_main);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-
-        grid = findViewById(R.id.grid);
-        adapter = new Adapter();
-        grid.setAdapter(adapter);
-        grid.setOnItemClickListener((p, v, pos, id) -> open(items.get(pos)));
-        grid.setOnItemLongClickListener((p, v, pos, id) -> {
-            showOptions(pos);
-            return true;
-        });
+        inf = LayoutInflater.from(this);
+        row = findViewById(R.id.row);
+        scroller = findViewById(R.id.scroller);
+        wallpaper = findViewById(R.id.wallpaper);
 
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -102,17 +105,27 @@ public class MainActivity extends Activity {
         f.addDataScheme("package");
         registerReceiver(pkgReceiver, f);
 
+        // Quyền đọc bộ nhớ: để lấy hình nền của tivi và ảnh trong USB
+        if (Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 33
+                && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+        }
+
+        applyBackground();
         loadApps();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] p, int[] r) {
+        applyBackground();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (needReload) {
-            needReload = false;
-            loadApps();
-        }
-        grid.requestFocus();
+        if (needReload) { needReload = false; loadApps(); }
+        focusTile(focusIndex);
+        ui.postDelayed(this::askHomeService, 1500);
     }
 
     @Override
@@ -121,29 +134,219 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    /** Bấm Home khi đang ở màn hình chính -> về ô đầu tiên. */
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (!items.isEmpty()) grid.setSelection(0);
-        grid.requestFocus();
+        focusTile(0);
     }
 
-    /** Launcher không được thoát khi bấm Back. */
     @Override
-    public void onBackPressed() {
-        if (grid.getSelectedItemPosition() > 0) grid.setSelection(0);
-    }
+    public void onBackPressed() { focusTile(0); }
 
-    /** Nút Menu trên remote cũng mở tuỳ chọn cho ô đang chọn. */
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent e) {
         if (keyCode == KeyEvent.KEYCODE_MENU) {
-            int pos = grid.getSelectedItemPosition();
-            if (pos >= 0) showOptions(pos);
+            showOptions(focusIndex);
             return true;
         }
         return super.onKeyDown(keyCode, e);
+    }
+
+    // ------------------------------------------------------------------ nút Home
+
+    private boolean isDefaultHome() {
+        Intent i = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
+        ResolveInfo ri = getPackageManager().resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY);
+        return ri != null && ri.activityInfo != null && getPackageName().equals(ri.activityInfo.packageName);
+    }
+
+    static boolean homeServiceOn(Context c) {
+        String s = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        return s != null && s.contains(c.getPackageName() + "/");
+    }
+
+    /** Tivi không cho đặt mặc định -> mời bật dịch vụ "Nút Home mở Gọn Launcher". */
+    private void askHomeService() {
+        if (askedHome || isFinishing() || !hasWindowFocus()) return;
+        if (isDefaultHome() || homeServiceOn(this) || prefs.getBoolean("no_ask_home", false)) return;
+        askedHome = true;
+        new AlertDialog.Builder(this)
+                .setTitle("Cho nút Home mở Gọn Launcher")
+                .setMessage("Tivi không cho đặt launcher mặc định. Hãy bật dịch vụ \"Gọn Launcher – Nút Home\":\n\n" +
+                        "Cài đặt → Hỗ trợ tiếp cận (Trợ năng) → Gọn Launcher – Nút Home → Bật.\n\n" +
+                        "Sau đó mỗi lần bấm Home hoặc bật tivi sẽ vào thẳng Gọn Launcher.")
+                .setPositiveButton("Mở Cài đặt", (d, w) -> {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                    } catch (Exception e) {
+                        try { startActivity(new Intent(Settings.ACTION_SETTINGS)); } catch (Exception ignored) { }
+                    }
+                })
+                .setNeutralButton("Không hỏi nữa", (d, w) -> prefs.edit().putBoolean("no_ask_home", true).apply())
+                .setNegativeButton("Để sau", null)
+                .show();
+    }
+
+    // ------------------------------------------------------------------ hình nền
+
+    private void applyBackground() {
+        final String mode = prefs.getString(KEY_BG, "img1");
+        new Thread(() -> {
+            Drawable d = null;
+            try {
+                if (mode.startsWith("file:")) {
+                    Bitmap bm = decodeScaled(mode.substring(5));
+                    if (bm != null) d = new BitmapDrawable(getResources(), bm);
+                } else if (mode.startsWith("grad")) {
+                    d = gradient(mode);
+                } else if (mode.startsWith("img")) {
+                    d = builtIn(mode);
+                } else {
+                    d = tvWallpaper();
+                }
+            } catch (Throwable ignored) { }
+            if (d == null) d = builtIn("img1");
+            if (d == null) d = gradient("grad1");
+            final Drawable fd = d;
+            ui.post(() -> wallpaper.setImageDrawable(fd));
+        }, "wallpaper").start();
+    }
+
+    /** Hình nền đang cài trên tivi, nếu không có thì hình nền gốc của hệ thống. */
+    private Drawable tvWallpaper() {
+        WallpaperManager wm = WallpaperManager.getInstance(this);
+        Drawable d = null;
+        try { d = wm.getDrawable(); } catch (Throwable ignored) { }
+        if (d == null) {
+            try { d = wm.getBuiltInDrawable(); } catch (Throwable ignored) { }
+        }
+        if (d instanceof BitmapDrawable) {
+            Bitmap src = ((BitmapDrawable) d).getBitmap();
+            if (src == null || src.getWidth() < 64) return null; // ảnh đen 1 điểm -> bỏ
+            DisplayMetrics dm = getResources().getDisplayMetrics();
+            int w = Math.max(dm.widthPixels, dm.heightPixels);
+            if (src.getWidth() > w) {
+                int h = (int) ((long) src.getHeight() * w / src.getWidth());
+                Bitmap small = Bitmap.createScaledBitmap(src, w, h, true);
+                try { wm.forgetLoadedWallpaper(); } catch (Throwable ignored) { }
+                return new BitmapDrawable(getResources(), small);
+            }
+        }
+        return d;
+    }
+
+    /** 3 ảnh phong cảnh có sẵn trong launcher. */
+    private Drawable builtIn(String which) {
+        int id;
+        switch (which) {
+            case "img2": id = R.drawable.wall_night; break;
+            case "img3": id = R.drawable.wall_dawn; break;
+            default:     id = R.drawable.wall_dusk; break;
+        }
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inPreferredConfig = Bitmap.Config.RGB_565;
+        o.inScaled = false;
+        Bitmap bm = BitmapFactory.decodeResource(getResources(), id, o);
+        return bm != null ? new BitmapDrawable(getResources(), bm) : null;
+    }
+
+    private Bitmap decodeScaled(String path) {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(path, o);
+        if (o.outWidth <= 0) return null;
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int target = Math.max(dm.widthPixels, dm.heightPixels);
+        int s = 1;
+        while (o.outWidth / (s * 2) >= target) s *= 2;
+        BitmapFactory.Options o2 = new BitmapFactory.Options();
+        o2.inSampleSize = s;
+        o2.inPreferredConfig = Bitmap.Config.RGB_565; // tiết kiệm RAM
+        return BitmapFactory.decodeFile(path, o2);
+    }
+
+    private static Drawable gradient(String which) {
+        int[] c;
+        switch (which) {
+            case "grad2": c = new int[]{0xFF0F2027, 0xFF203A43, 0xFF2C5364}; break;   // xanh biển đêm
+            case "grad3": c = new int[]{0xFF1A1A2E, 0xFF3A1C71, 0xFF7B4397}; break;   // tím
+            case "grad4": c = new int[]{0xFF134E5E, 0xFF2E7D5B, 0xFF71B280}; break;   // xanh lá
+            default:      c = new int[]{0xFF141E30, 0xFF243B55, 0xFF3A6073}; break;   // xanh xám
+        }
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR, c);
+        return g;
+    }
+
+    private void chooseBackground() {
+        final String[] opts = {"Hoàng hôn trên núi", "Đêm trăng bên hồ", "Bình minh trong sương",
+                "Hình nền của tivi", "Chọn ảnh trong USB / bộ nhớ",
+                "Màu xanh xám", "Màu xanh biển đêm", "Màu tím", "Màu xanh lá"};
+        new AlertDialog.Builder(this)
+                .setTitle("Hình nền")
+                .setItems(opts, (d, w) -> {
+                    if (w <= 2) setBg("img" + (w + 1));
+                    else if (w == 3) setBg("tv");
+                    else if (w == 4) pickImage();
+                    else setBg("grad" + (w - 4));
+                }).show();
+    }
+
+    private void setBg(String mode) {
+        prefs.edit().putString(KEY_BG, mode).apply();
+        applyBackground();
+    }
+
+    /** Tìm ảnh trong bộ nhớ trong và USB (không cần app quản lý file). */
+    private void pickImage() {
+        if (Build.VERSION.SDK_INT >= 23 && Build.VERSION.SDK_INT < 33
+                && checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+            Toast.makeText(this, "Hãy cho phép đọc bộ nhớ rồi chọn lại", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, "Đang tìm ảnh…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            final List<File> found = new ArrayList<>();
+            List<File> roots = new ArrayList<>();
+            roots.add(Environment.getExternalStorageDirectory());
+            File[] vols = new File("/storage").listFiles();
+            if (vols != null) for (File v : vols) {
+                String n = v.getName();
+                if (!n.equals("emulated") && !n.equals("self") && v.canRead()) roots.add(v);
+            }
+            for (File r : roots) scan(r, 0, found);
+            ui.post(() -> {
+                if (found.isEmpty()) {
+                    Toast.makeText(this, "Không thấy ảnh .jpg/.png nào. Hãy chép ảnh vào USB rồi cắm vào tivi.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String[] names = new String[found.size()];
+                for (int i = 0; i < names.length; i++) {
+                    File fl = found.get(i);
+                    names[i] = fl.getName() + "   (" + fl.getParentFile().getName() + ")";
+                }
+                new AlertDialog.Builder(this)
+                        .setTitle("Chọn ảnh nền")
+                        .setItems(names, (d, w) -> setBg("file:" + found.get(w).getAbsolutePath()))
+                        .show();
+            });
+        }, "scan").start();
+    }
+
+    private void scan(File dir, int depth, List<File> out) {
+        if (dir == null || depth > 3 || out.size() >= 200) return;
+        File[] fs = dir.listFiles();
+        if (fs == null) return;
+        for (File f : fs) {
+            String n = f.getName();
+            if (n.startsWith(".") || n.equals("Android")) continue;
+            if (f.isDirectory()) scan(f, depth + 1, out);
+            else {
+                String l = n.toLowerCase(Locale.ROOT);
+                if ((l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".png") || l.endsWith(".webp"))
+                        && f.length() > 30 * 1024) out.add(f);
+            }
+        }
     }
 
     // ------------------------------------------------------------------ tải app
@@ -157,13 +360,11 @@ public class MainActivity extends Activity {
             build(shown, hidden);
             ui.post(() -> {
                 loading = false;
-                int keep = grid.getSelectedItemPosition();
                 items.clear();
                 items.addAll(shown);
                 hiddenApps.clear();
                 hiddenApps.addAll(hidden);
-                adapter.notifyDataSetChanged();
-                if (keep >= 0 && keep < items.size()) grid.setSelection(keep);
+                renderRow();
                 if (needReload) { needReload = false; loadApps(); }
             });
         }, "load-apps").start();
@@ -173,10 +374,7 @@ public class MainActivity extends Activity {
         PackageManager pm = getPackageManager();
         String me = getPackageName();
         Map<String, Item> byPkg = new LinkedHashMap<>();
-
-        // 1) App dành cho TV (ưu tiên vì có banner ngang)
         collect(pm, Intent.CATEGORY_LEANBACK_LAUNCHER, me, byPkg);
-        // 2) App điện thoại còn lại
         collect(pm, Intent.CATEGORY_LAUNCHER, me, byPkg);
 
         Set<String> hiddenSet = prefs.getStringSet(KEY_HIDDEN, new HashSet<>());
@@ -185,7 +383,6 @@ public class MainActivity extends Activity {
             if (hiddenSet.contains(it.pkg)) hidden.add(it); else apps.add(it);
         }
 
-        // Sắp xếp: theo thứ tự người dùng đã chỉnh, app mới thêm xếp theo ABC ở cuối
         final Map<String, Integer> rank = new HashMap<>();
         String[] order = prefs.getString(KEY_ORDER, "").split(",");
         for (int i = 0; i < order.length; i++) if (!order[i].isEmpty()) rank.put(order[i], i);
@@ -200,26 +397,20 @@ public class MainActivity extends Activity {
         Collections.sort(hidden, (a, b) -> col.compare(a.label, b.label));
         shown.addAll(apps);
 
-        // Ô cố định ở cuối
-        Item s = new Item();
-        s.type = TYPE_SETTINGS;
-        s.label = "Cài đặt";
-        s.icon = getDrawable(android.R.drawable.ic_menu_preferences);
-        shown.add(s);
-
-        Item c = new Item();
-        c.type = TYPE_CLEAN;
-        c.label = "Dọn dẹp tivi";
-        c.icon = getDrawable(android.R.drawable.ic_menu_delete);
-        shown.add(c);
-
+        shown.add(fixed(TYPE_SETTINGS, "Cài đặt", android.R.drawable.ic_menu_preferences));
+        shown.add(fixed(TYPE_WALL, "Hình nền", android.R.drawable.ic_menu_gallery));
+        shown.add(fixed(TYPE_CLEAN, "Dọn dẹp tivi", android.R.drawable.ic_menu_delete));
         if (!hidden.isEmpty()) {
-            Item h = new Item();
-            h.type = TYPE_HIDDEN;
-            h.label = "App đã ẩn (" + hidden.size() + ")";
-            h.icon = getDrawable(android.R.drawable.ic_menu_view);
-            shown.add(h);
+            shown.add(fixed(TYPE_HIDDEN, "App đã ẩn (" + hidden.size() + ")", android.R.drawable.ic_menu_view));
         }
+    }
+
+    private Item fixed(int type, String label, int icon) {
+        Item it = new Item();
+        it.type = type;
+        it.label = label;
+        it.icon = getDrawable(icon);
+        return it;
     }
 
     private void collect(PackageManager pm, String category, String me, Map<String, Item> out) {
@@ -245,26 +436,69 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ------------------------------------------------------------------ hàng app
+
+    private void renderRow() {
+        row.removeAllViews();
+        tiles.clear();
+        for (int i = 0; i < items.size(); i++) {
+            final int pos = i;
+            final Item it = items.get(i);
+            View v = inf.inflate(R.layout.item_app, row, false);
+            ImageView banner = v.findViewById(R.id.banner);
+            ImageView icon = v.findViewById(R.id.icon);
+            TextView label = v.findViewById(R.id.label);
+            label.setText(it.label);
+            if (it.banner != null) {
+                banner.setImageDrawable(it.banner);
+                banner.setVisibility(View.VISIBLE);
+                icon.setVisibility(View.GONE);
+            } else {
+                icon.setImageDrawable(it.icon);
+            }
+            v.setOnClickListener(x -> open(it));
+            v.setOnLongClickListener(x -> { showOptions(pos); return true; });
+            v.setOnFocusChangeListener((x, has) -> {
+                float s = has ? 1.12f : 1f;
+                x.animate().scaleX(s).scaleY(s).setDuration(120).start();
+                if (has) focusIndex = pos;
+            });
+            row.addView(v);
+            tiles.add(v);
+        }
+        if (focusIndex >= tiles.size()) focusIndex = 0;
+        focusTile(focusIndex);
+    }
+
+    private void focusTile(int i) {
+        if (tiles.isEmpty()) return;
+        if (i < 0 || i >= tiles.size()) i = 0;
+        final View v = tiles.get(i);
+        v.requestFocus();
+        if (i == 0) scroller.smoothScrollTo(0, 0);
+    }
+
     // ------------------------------------------------------------------ mở app
 
     private void open(Item it) {
         try {
-            if (it.type == TYPE_SETTINGS) {
-                startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                return;
+            switch (it.type) {
+                case TYPE_SETTINGS:
+                    startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    return;
+                case TYPE_CLEAN:
+                    startActivity(new Intent(this, CleanActivity.class));
+                    return;
+                case TYPE_WALL:
+                    chooseBackground();
+                    return;
+                case TYPE_HIDDEN:
+                    showHidden();
+                    return;
             }
-            if (it.type == TYPE_CLEAN) {
-                startActivity(new Intent(this, CleanActivity.class));
-                return;
-            }
-            if (it.type == TYPE_HIDDEN) {
-                showHidden();
-                return;
-            }
-            Intent i = new Intent(Intent.ACTION_MAIN)
+            startActivity(new Intent(Intent.ACTION_MAIN)
                     .setComponent(it.comp)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            startActivity(i);
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
         } catch (Exception e) {
             Toast.makeText(this, "Không mở được " + it.label, Toast.LENGTH_SHORT).show();
         }
@@ -276,7 +510,6 @@ public class MainActivity extends Activity {
         if (pos < 0 || pos >= items.size()) return;
         final Item it = items.get(pos);
         if (it.type != TYPE_APP) { open(it); return; }
-
         String[] opts = {"Đưa lên đầu", "Dời sang trái", "Dời sang phải", "Ẩn app này", "Thông tin app"};
         new AlertDialog.Builder(this)
                 .setTitle(it.label)
@@ -288,8 +521,7 @@ public class MainActivity extends Activity {
                         case 3: hide(it); break;
                         case 4: appInfo(it); break;
                     }
-                })
-                .show();
+                }).show();
     }
 
     private int appCount() {
@@ -299,19 +531,14 @@ public class MainActivity extends Activity {
     }
 
     private void move(int from, int to) {
-        int n = appCount();
-        if (to < 0 || to >= n || from == to) return;
+        if (to < 0 || to >= appCount() || from == to) return;
         Item it = items.remove(from);
         items.add(to, it);
-        saveOrder();
-        adapter.notifyDataSetChanged();
-        grid.setSelection(to);
-    }
-
-    private void saveOrder() {
         StringBuilder sb = new StringBuilder();
         for (Item i : items) if (i.type == TYPE_APP) sb.append(i.pkg).append(',');
         prefs.edit().putString(KEY_ORDER, sb.toString()).apply();
+        focusIndex = to;
+        renderRow();
     }
 
     private void hide(Item it) {
@@ -333,8 +560,7 @@ public class MainActivity extends Activity {
                     s.remove(hiddenApps.get(which).pkg);
                     prefs.edit().putStringSet(KEY_HIDDEN, s).apply();
                     loadApps();
-                })
-                .show();
+                }).show();
     }
 
     private void appInfo(Item it) {
@@ -343,48 +569,6 @@ public class MainActivity extends Activity {
                     Uri.parse("package:" + it.pkg)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (Exception e) {
             Toast.makeText(this, "Tivi không hỗ trợ mục này", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    // ------------------------------------------------------------------ adapter
-
-    static class Holder {
-        ImageView banner, icon;
-        TextView label;
-    }
-
-    class Adapter extends BaseAdapter {
-        private final LayoutInflater inf = LayoutInflater.from(MainActivity.this);
-
-        @Override public int getCount() { return items.size(); }
-        @Override public Object getItem(int p) { return items.get(p); }
-        @Override public long getItemId(int p) { return p; }
-
-        @Override
-        public View getView(int p, View v, ViewGroup parent) {
-            Holder h;
-            if (v == null) {
-                v = inf.inflate(R.layout.item_app, parent, false);
-                h = new Holder();
-                h.banner = v.findViewById(R.id.banner);
-                h.icon = v.findViewById(R.id.icon);
-                h.label = v.findViewById(R.id.label);
-                v.setTag(h);
-            } else {
-                h = (Holder) v.getTag();
-            }
-            Item it = items.get(p);
-            h.label.setText(it.label);
-            if (it.banner != null) {
-                h.banner.setImageDrawable(it.banner);
-                h.banner.setVisibility(View.VISIBLE);
-                h.icon.setVisibility(View.GONE);
-            } else {
-                h.icon.setImageDrawable(it.icon);
-                h.icon.setVisibility(View.VISIBLE);
-                h.banner.setVisibility(View.GONE);
-            }
-            return v;
         }
     }
 }

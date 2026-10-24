@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
+    android:layout_width="164dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:focusable="true"
+    android:clickable="true"
+    android:longClickable="true"
+    android:padding="7dp">
 
     <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="100dp"
-        android:background="@drawable/tile_bg">
+        android:id="@+id/frame"
+        android:layout_width="150dp"
+        android:layout_height="84dp"
+        android:background="@drawable/tile_bg"
+        android:foreground="@drawable/tile_selector"
+        android:duplicateParentState="true">
 
-        <!-- Banner ngang (app TV) -->
         <ImageView
             android:id="@+id/banner"
             android:layout_width="match_parent"
@@ -18,23 +23,24 @@
             android:scaleType="fitCenter"
             android:visibility="gone" />
 
-        <!-- Icon vuông (app điện thoại) -->
         <ImageView
             android:id="@+id/icon"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
             android:layout_gravity="center"
             android:scaleType="fitCenter" />
     </FrameLayout>
 
     <TextView
         android:id="@+id/label"
-        android:layout_width="match_parent"
+        android:layout_width="150dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:gravity="center"
         android:singleLine="true"
         android:ellipsize="end"
         android:textColor="@color/text"
-        android:textSize="17sp" />
+        android:textSize="15sp"
+        android:shadowColor="#CC000000"
+        android:shadowRadius="4" />
 </LinearLayout>

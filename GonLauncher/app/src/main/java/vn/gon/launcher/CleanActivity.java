@@ -44,7 +44,6 @@ public class CleanActivity extends Activity {
             "com.google.android.leanbacklauncher",
             "com.google.android.leanbacklauncher.recommendations",
             "com.google.android.tvrecommendations",
-            "com.google.android.backdrop",
             "com.google.android.feedback",
             "com.google.android.music",
             "com.google.android.videos",
