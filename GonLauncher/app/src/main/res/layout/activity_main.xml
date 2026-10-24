@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg"
+    android:paddingLeft="56dp"
+    android:paddingRight="56dp"
+    android:paddingTop="32dp"
+    android:paddingBottom="16dp">
+
+    <!-- Thanh trên: giờ lớn + ngày -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="bottom"
+        android:layout_marginBottom="24dp">
+
+        <TextClock
+            android:id="@+id/clock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:format12Hour="HH:mm"
+            android:format24Hour="HH:mm"
+            android:textColor="@color/text"
+            android:textSize="56sp"
+            android:fontFamily="sans-serif-light" />
+
+        <TextClock
+            android:id="@+id/date"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="20dp"
+            android:layout_marginBottom="12dp"
+            android:format12Hour="EEEE, dd/MM/yyyy"
+            android:format24Hour="EEEE, dd/MM/yyyy"
+            android:textColor="@color/text_dim"
+            android:textSize="22sp" />
+
+        <TextView
+            android:id="@+id/hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp"
+            android:text="Giữ nút OK để sắp xếp / ẩn app"
+            android:textColor="@color/text_dim"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <GridView
+        android:id="@+id/grid"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:numColumns="5"
+        android:verticalSpacing="12dp"
+        android:horizontalSpacing="12dp"
+        android:stretchMode="columnWidth"
+        android:listSelector="@drawable/tile_selector"
+        android:drawSelectorOnTop="true"
+        android:scrollbars="none"
+        android:clipToPadding="false"
+        android:padding="6dp"
+        android:nextFocusUp="@id/grid" />
+</LinearLayout>

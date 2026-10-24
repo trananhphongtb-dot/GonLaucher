@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Banner 320x180 hiển thị trong danh sách app của Android TV -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#101418" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#4FC3F7" android:pathData="M70,50h50v35h-50z M135,50h50v35h-50z M200,50h50v35h-50z" />
+    <path android:fillColor="#2A6F8F" android:pathData="M70,95h50v35h-50z M135,95h50v35h-50z M200,95h50v35h-50z" />
+</vector>
