@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
     private static final String KEY_HIDDEN = "hidden";
     private static final String KEY_BG = "bg";
 
-    private static final int TYPE_APP = 0, TYPE_SETTINGS = 1, TYPE_HIDDEN = 2, TYPE_CLEAN = 3, TYPE_WALL = 4;
+    private static final int TYPE_APP = 0, TYPE_SETTINGS = 1, TYPE_HIDDEN = 2, TYPE_CLEAN = 3, TYPE_WALL = 4, TYPE_HOMEFIX = 5;
 
     static class Item {
         int type = TYPE_APP;
@@ -144,6 +144,8 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (needReload) { needReload = false; loadApps(); }
+        else if (!items.isEmpty() && !isDefaultHome()
+                && (items.get(0).type == TYPE_HOMEFIX) == homeServiceOn(this)) loadApps();
         updateClock();
         focusTile(focusIndex);
         String v = "";
@@ -193,14 +195,16 @@ public class MainActivity extends Activity {
 
     /** Tivi không cho đặt mặc định -> mời bật dịch vụ "Nút Home mở Gọn Launcher". */
     private void askHomeService() {
-        if (askedHome || isFinishing() || !hasWindowFocus()) return;
+        if (askedHome || isFinishing()) return;
         if (isDefaultHome() || homeServiceOn(this) || prefs.getBoolean("no_ask_home", false)) return;
         askedHome = true;
         new AlertDialog.Builder(this)
                 .setTitle("Cho nút Home mở Gọn Launcher")
-                .setMessage("Tivi không cho đặt launcher mặc định. Hãy bật dịch vụ \"Gọn Launcher – Nút Home\":\n\n" +
-                        "Cài đặt → Hỗ trợ tiếp cận (Trợ năng) → Gọn Launcher – Nút Home → Bật.\n\n" +
-                        "Sau đó mỗi lần bấm Home hoặc bật tivi sẽ vào thẳng Gọn Launcher.")
+                .setMessage("Tivi không cho đặt launcher mặc định, cần bật dịch vụ nút Home:\n\n" +
+                        "1. Bấm \"Mở Cài đặt\" bên dưới (màn hình Hỗ trợ tiếp cận sẽ mở ra).\n" +
+                        "2. Kéo xuống phần Dịch vụ, chọn \"Gọn Launcher – Nút Home\".\n" +
+                        "3. Chọn Bật / Sử dụng dịch vụ → bấm OK để đồng ý.\n" +
+                        "4. Bấm Back quay lại đây: góc trên phải sẽ báo \"Nút Home: BẬT\".")
                 .setPositiveButton("Mở Cài đặt", (d, w) -> {
                     try {
                         startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
@@ -432,6 +436,9 @@ public class MainActivity extends Activity {
             return col.compare(a.label, b.label);
         });
         Collections.sort(hidden, (a, b) -> col.compare(a.label, b.label));
+        if (!isDefaultHome() && !homeServiceOn(this)) {
+            shown.add(fixed(TYPE_HOMEFIX, "Bật nút Home", R.drawable.ic_settings, 0xFFC62828));
+        }
         shown.addAll(apps);
 
         shown.add(fixed(TYPE_SETTINGS, "Cài đặt", R.drawable.ic_settings, 0xFF37474F));
@@ -469,7 +476,6 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) { }
             if (it.banner == null) {
                 try { it.icon = ri.loadIcon(pm); } catch (Exception ignored) { }
-                it.color = Gon.tileColor(it.icon);
             }
             out.put(it.pkg, it);
         }
@@ -487,13 +493,15 @@ public class MainActivity extends Activity {
             ImageView banner = v.findViewById(R.id.banner);
             ImageView icon = v.findViewById(R.id.icon);
             TextView label = v.findViewById(R.id.label);
-            final View frame = v.findViewById(R.id.frame);
+            final View frame = v.findViewById(R.id.ring);
             label.setText(it.label);
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(14 * getResources().getDisplayMetrics().density);
-            bg.setColor(it.banner != null ? 0xFF000000 : it.color);
-            frame.setBackground(bg);
-            frame.setClipToOutline(true);
+            if (it.type == TYPE_HOMEFIX) {
+                GradientDrawable bg = new GradientDrawable();
+                bg.setCornerRadius(12 * getResources().getDisplayMetrics().density);
+                bg.setColor(0xFFC62828); // đỏ để dễ thấy
+                v.findViewById(R.id.frame).setBackground(bg);
+            }
+            v.findViewById(R.id.frame).setClipToOutline(true);
             if (it.banner != null) {
                 banner.setImageDrawable(it.banner);
                 banner.setVisibility(View.VISIBLE);
@@ -501,14 +509,14 @@ public class MainActivity extends Activity {
             } else {
                 icon.setImageDrawable(it.icon);
             }
-            frame.setAlpha(0.88f);
             final float elev = 10 * getResources().getDisplayMetrics().density;
             v.setOnClickListener(x -> open(it));
             v.setOnLongClickListener(x -> { showOptions(pos); return true; });
             v.setOnFocusChangeListener((x, has) -> {
-                frame.animate().scaleX(has ? 1.14f : 1f).scaleY(has ? 1.14f : 1f)
-                        .alpha(has ? 1f : 0.88f).translationZ(has ? elev : 0).setDuration(140).start();
-                label.animate().alpha(has ? 1f : 0f).setDuration(140).start();
+                frame.animate().scaleX(has ? 1.1f : 1f).scaleY(has ? 1.1f : 1f)
+                        .translationZ(has ? elev : 0).setDuration(140).start();
+                label.animate().translationY(has ? 6 * getResources().getDisplayMetrics().density : 0)
+                        .setDuration(140).start();
                 if (has) focusIndex = pos;
             });
             row.addView(v);
@@ -543,6 +551,11 @@ public class MainActivity extends Activity {
                 case TYPE_HIDDEN:
                     showHidden();
                     return;
+                case TYPE_HOMEFIX:
+                    askedHome = false;
+                    prefs.edit().putBoolean("no_ask_home", false).apply();
+                    askHomeService();
+                    return;
             }
             startActivity(new Intent(Intent.ACTION_MAIN)
                     .setComponent(it.comp)
@@ -563,7 +576,7 @@ public class MainActivity extends Activity {
                 .setTitle(it.label)
                 .setItems(opts, (d, which) -> {
                     switch (which) {
-                        case 0: move(pos, 0); break;
+                        case 0: move(pos, firstApp()); break;
                         case 1: move(pos, pos - 1); break;
                         case 2: move(pos, pos + 1); break;
                         case 3: hide(it); break;
@@ -578,8 +591,15 @@ public class MainActivity extends Activity {
         return n;
     }
 
+    private int firstApp() {
+        int f = 0;
+        while (f < items.size() && items.get(f).type != TYPE_APP) f++;
+        return f;
+    }
+
     private void move(int from, int to) {
-        if (to < 0 || to >= appCount() || from == to) return;
+        int f = firstApp();
+        if (to < f || to >= f + appCount() || from == to) return;
         Item it = items.remove(from);
         items.add(to, it);
         StringBuilder sb = new StringBuilder();

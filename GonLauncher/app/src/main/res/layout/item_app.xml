@@ -8,44 +8,50 @@
     android:clickable="true"
     android:longClickable="true"
     android:clipChildren="false"
-    android:paddingLeft="8dp"
-    android:paddingRight="8dp">
+    android:paddingLeft="4dp"
+    android:paddingRight="4dp">
 
-    <!-- Ô 16:9 bo góc -->
+    <!-- Vòng viền sáng nằm BÊN NGOÀI ô, cách ô 4dp -->
     <FrameLayout
-        android:id="@+id/frame"
-        android:layout_width="150dp"
-        android:layout_height="84dp"
-        android:foreground="@drawable/tile_selector"
+        android:id="@+id/ring"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="5dp"
+        android:background="@drawable/tile_selector"
         android:duplicateParentState="true">
 
-        <ImageView
-            android:id="@+id/banner"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:visibility="gone" />
+        <FrameLayout
+            android:id="@+id/frame"
+            android:layout_width="150dp"
+            android:layout_height="84dp"
+            android:background="@drawable/tile_bg">
 
-        <ImageView
-            android:id="@+id/icon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_gravity="center"
-            android:scaleType="fitCenter" />
+            <ImageView
+                android:id="@+id/banner"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/icon"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:layout_gravity="center"
+                android:scaleType="fitCenter" />
+        </FrameLayout>
     </FrameLayout>
 
-    <!-- Tên app: chỉ hiện ở ô đang chọn -->
     <TextView
         android:id="@+id/label"
-        android:layout_width="172dp"
+        android:layout_width="160dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="4dp"
         android:gravity="center"
         android:singleLine="true"
         android:ellipsize="end"
-        android:alpha="0"
         android:textColor="#FFFFFFFF"
-        android:textSize="16sp"
+        android:textSize="15sp"
         android:shadowColor="#CC000000"
         android:shadowRadius="4" />
 </LinearLayout>
