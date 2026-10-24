@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
         String label, pkg;
         ComponentName comp;
         Drawable banner, icon;
+        int color = 0xFF2A3440;
     }
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -80,6 +81,18 @@ public class MainActivity extends Activity {
     private boolean needReload = false;
     private int focusIndex = 0;
     private boolean askedHome = false;
+
+    private TextView timeView, dateView;
+
+    private final BroadcastReceiver clockReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) { updateClock(); }
+    };
+
+    private void updateClock() {
+        timeView.setText(Gon.time());
+        dateView.setText(Gon.date());
+    }
 
     private final BroadcastReceiver pkgReceiver = new BroadcastReceiver() {
         @Override
@@ -97,6 +110,13 @@ public class MainActivity extends Activity {
         row = findViewById(R.id.row);
         scroller = findViewById(R.id.scroller);
         wallpaper = findViewById(R.id.wallpaper);
+        timeView = findViewById(R.id.time);
+        dateView = findViewById(R.id.date);
+        updateClock();
+        IntentFilter cf = new IntentFilter(Intent.ACTION_TIME_TICK);
+        cf.addAction(Intent.ACTION_TIME_CHANGED);
+        cf.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+        registerReceiver(clockReceiver, cf);
 
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -124,13 +144,19 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (needReload) { needReload = false; loadApps(); }
+        updateClock();
         focusTile(focusIndex);
+        String v = "";
+        try { v = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
+        ((TextView) findViewById(R.id.ver)).setText("Gọn Launcher " + v + "  •  Nút Home: "
+                + (isDefaultHome() ? "mặc định" : homeServiceOn(this) ? "BẬT" : "TẮT"));
         ui.postDelayed(this::askHomeService, 1500);
     }
 
     @Override
     protected void onDestroy() {
         try { unregisterReceiver(pkgReceiver); } catch (Exception ignored) { }
+        try { unregisterReceiver(clockReceiver); } catch (Exception ignored) { }
         super.onDestroy();
     }
 
@@ -280,15 +306,26 @@ public class MainActivity extends Activity {
     private void chooseBackground() {
         final String[] opts = {"Hoàng hôn trên núi", "Đêm trăng bên hồ", "Bình minh trong sương",
                 "Hình nền của tivi", "Chọn ảnh trong USB / bộ nhớ",
-                "Màu xanh xám", "Màu xanh biển đêm", "Màu tím", "Màu xanh lá"};
+                "Màu xanh xám", "Màu xanh biển đêm", "Màu tím", "Màu xanh lá",
+                "Cài màn hình chờ Gọn Launcher…"};
         new AlertDialog.Builder(this)
                 .setTitle("Hình nền")
                 .setItems(opts, (d, w) -> {
                     if (w <= 2) setBg("img" + (w + 1));
                     else if (w == 3) setBg("tv");
                     else if (w == 4) pickImage();
+                    else if (w == opts.length - 1) openDreamSettings();
                     else setBg("grad" + (w - 4));
                 }).show();
+    }
+
+    private void openDreamSettings() {
+        Toast.makeText(this, "Chọn \"Gọn Launcher\" trong danh sách màn hình chờ", Toast.LENGTH_LONG).show();
+        try {
+            startActivity(new Intent(Settings.ACTION_DREAM_SETTINGS));
+        } catch (Exception e) {
+            try { startActivity(new Intent(Settings.ACTION_DISPLAY_SETTINGS)); } catch (Exception ignored) { }
+        }
     }
 
     private void setBg(String mode) {
@@ -397,19 +434,20 @@ public class MainActivity extends Activity {
         Collections.sort(hidden, (a, b) -> col.compare(a.label, b.label));
         shown.addAll(apps);
 
-        shown.add(fixed(TYPE_SETTINGS, "Cài đặt", android.R.drawable.ic_menu_preferences));
-        shown.add(fixed(TYPE_WALL, "Hình nền", android.R.drawable.ic_menu_gallery));
-        shown.add(fixed(TYPE_CLEAN, "Dọn dẹp tivi", android.R.drawable.ic_menu_delete));
+        shown.add(fixed(TYPE_SETTINGS, "Cài đặt", R.drawable.ic_settings, 0xFF37474F));
+        shown.add(fixed(TYPE_WALL, "Hình nền", R.drawable.ic_wallpaper, 0xFF00796B));
+        shown.add(fixed(TYPE_CLEAN, "Dọn dẹp tivi", R.drawable.ic_clean, 0xFF5E35B1));
         if (!hidden.isEmpty()) {
-            shown.add(fixed(TYPE_HIDDEN, "App đã ẩn (" + hidden.size() + ")", android.R.drawable.ic_menu_view));
+            shown.add(fixed(TYPE_HIDDEN, "App đã ẩn (" + hidden.size() + ")", R.drawable.ic_hidden, 0xFF455A64));
         }
     }
 
-    private Item fixed(int type, String label, int icon) {
+    private Item fixed(int type, String label, int icon, int color) {
         Item it = new Item();
         it.type = type;
         it.label = label;
         it.icon = getDrawable(icon);
+        it.color = color;
         return it;
     }
 
@@ -431,6 +469,7 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) { }
             if (it.banner == null) {
                 try { it.icon = ri.loadIcon(pm); } catch (Exception ignored) { }
+                it.color = Gon.tileColor(it.icon);
             }
             out.put(it.pkg, it);
         }
@@ -448,7 +487,13 @@ public class MainActivity extends Activity {
             ImageView banner = v.findViewById(R.id.banner);
             ImageView icon = v.findViewById(R.id.icon);
             TextView label = v.findViewById(R.id.label);
+            final View frame = v.findViewById(R.id.frame);
             label.setText(it.label);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(14 * getResources().getDisplayMetrics().density);
+            bg.setColor(it.banner != null ? 0xFF000000 : it.color);
+            frame.setBackground(bg);
+            frame.setClipToOutline(true);
             if (it.banner != null) {
                 banner.setImageDrawable(it.banner);
                 banner.setVisibility(View.VISIBLE);
@@ -456,11 +501,14 @@ public class MainActivity extends Activity {
             } else {
                 icon.setImageDrawable(it.icon);
             }
+            frame.setAlpha(0.88f);
+            final float elev = 10 * getResources().getDisplayMetrics().density;
             v.setOnClickListener(x -> open(it));
             v.setOnLongClickListener(x -> { showOptions(pos); return true; });
             v.setOnFocusChangeListener((x, has) -> {
-                float s = has ? 1.12f : 1f;
-                x.animate().scaleX(s).scaleY(s).setDuration(120).start();
+                frame.animate().scaleX(has ? 1.14f : 1f).scaleY(has ? 1.14f : 1f)
+                        .alpha(has ? 1f : 0.88f).translationZ(has ? elev : 0).setDuration(140).start();
+                label.animate().alpha(has ? 1f : 0f).setDuration(140).start();
                 if (has) focusIndex = pos;
             });
             row.addView(v);

@@ -25,36 +25,50 @@
         android:layout_gravity="bottom"
         android:background="@drawable/shade_bottom" />
 
-    <!-- Đồng hồ góc trên trái -->
+    <!-- Đồng hồ 1 dòng ngang trên cùng: 01:02  Chủ Nhật 25-12-2026 -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
-        android:layout_marginLeft="48dp"
-        android:layout_marginTop="28dp"
-        android:orientation="vertical">
+        android:layout_marginLeft="52dp"
+        android:layout_marginTop="26dp"
+        android:orientation="horizontal"
+        android:baselineAligned="true">
 
-        <TextClock
+        <TextView
+            android:id="@+id/time"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:format12Hour="HH:mm"
-            android:format24Hour="HH:mm"
-            android:textColor="@color/text"
-            android:textSize="54sp"
+            android:textColor="#FFFFFFFF"
+            android:textSize="44sp"
             android:fontFamily="sans-serif-light"
             android:shadowColor="#AA000000"
             android:shadowRadius="6" />
 
-        <TextClock
+        <TextView
+            android:id="@+id/date"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:format12Hour="EEEE, dd/MM/yyyy"
-            android:format24Hour="EEEE, dd/MM/yyyy"
-            android:textColor="@color/text"
-            android:textSize="20sp"
+            android:layout_marginLeft="20dp"
+            android:textColor="#E6FFFFFF"
+            android:textSize="22sp"
+            android:fontFamily="sans-serif"
             android:shadowColor="#AA000000"
             android:shadowRadius="6" />
     </LinearLayout>
+
+    <!-- Phiên bản + trạng thái nút Home (góc trên phải) -->
+    <TextView
+        android:id="@+id/ver"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="44dp"
+        android:layout_marginRight="48dp"
+        android:textColor="#CCF2F4F6"
+        android:textSize="14sp"
+        android:shadowColor="#AA000000"
+        android:shadowRadius="4" />
 
     <!-- Hàng app dưới đáy -->
     <HorizontalScrollView
@@ -62,14 +76,14 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:layout_marginBottom="28dp"
+        android:layout_marginBottom="12dp"
         android:scrollbars="none"
         android:clipToPadding="false"
         android:clipChildren="false"
         android:paddingLeft="40dp"
         android:paddingRight="40dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="8dp">
+        android:paddingTop="20dp"
+        android:paddingBottom="4dp">
 
         <LinearLayout
             android:id="@+id/row"

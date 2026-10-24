@@ -6,6 +6,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.SystemClock;
+import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
 import java.util.HashSet;
@@ -70,6 +71,22 @@ public class HomeService extends AccessibilityService {
         long now = SystemClock.elapsedRealtime();
         if (now - last < 800) return;
         last = now;
+        try {
+            startActivity(new Intent(this, MainActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+        } catch (Exception ignored) { }
+    }
+
+    /** Bắt nút Home trên remote trước khi tivi xử lý -> mở Gọn Launcher. */
+    @Override
+    protected boolean onKeyEvent(KeyEvent e) {
+        if (e.getKeyCode() != KeyEvent.KEYCODE_HOME) return false;
+        if (e.getAction() == KeyEvent.ACTION_UP) goHome();
+        return true; // nuốt phím, launcher gốc không được mở
+    }
+
+    private void goHome() {
+        last = SystemClock.elapsedRealtime();
         try {
             startActivity(new Intent(this, MainActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));

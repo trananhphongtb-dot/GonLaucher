@@ -1,18 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="164dp"
+    android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:orientation="vertical"
+    android:gravity="center_horizontal"
     android:focusable="true"
     android:clickable="true"
     android:longClickable="true"
-    android:padding="7dp">
+    android:clipChildren="false"
+    android:paddingLeft="8dp"
+    android:paddingRight="8dp">
 
+    <!-- Ô 16:9 bo góc -->
     <FrameLayout
         android:id="@+id/frame"
         android:layout_width="150dp"
         android:layout_height="84dp"
-        android:background="@drawable/tile_bg"
         android:foreground="@drawable/tile_selector"
         android:duplicateParentState="true">
 
@@ -20,27 +23,29 @@
             android:id="@+id/banner"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scaleType="fitCenter"
+            android:scaleType="centerCrop"
             android:visibility="gone" />
 
         <ImageView
             android:id="@+id/icon"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:layout_gravity="center"
             android:scaleType="fitCenter" />
     </FrameLayout>
 
+    <!-- Tên app: chỉ hiện ở ô đang chọn -->
     <TextView
         android:id="@+id/label"
-        android:layout_width="150dp"
+        android:layout_width="172dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="12dp"
         android:gravity="center"
         android:singleLine="true"
         android:ellipsize="end"
-        android:textColor="@color/text"
-        android:textSize="15sp"
+        android:alpha="0"
+        android:textColor="#FFFFFFFF"
+        android:textSize="16sp"
         android:shadowColor="#CC000000"
         android:shadowRadius="4" />
 </LinearLayout>
